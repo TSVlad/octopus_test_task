@@ -1,0 +1,91 @@
+version: "3.9"
+
+volumes:
+    keycloak_postgres_data:
+        driver: local
+    file_service_postgres_data:
+        driver: local
+
+services:
+
+    keycloak-postgres-test:
+        image: postgres:14.2
+        container_name: keycloak-postgres-test
+        environment:
+            POSTGRES_USER: $KEYCLOAK_POSTGRES_USER
+            POSTGRES_PASSWORD: $KEYCLOAK_POSTGRES_PASSWORD
+            POSTGRES_DB: $KEYCLOAK_POSTGRES_DB
+        restart: unless-stopped
+        volumes:
+            - keycloak_postgres_data:/var/lib/postgresql/data
+        networks:
+            - internal
+
+    keycloak-test:
+        image: jboss/keycloak:16.1.1
+        container_name: keycloak-test
+        environment:
+            DB_VENDOR: POSTGRES
+            DB_ADDR: keycloak-postgres-test
+            DB_PORT: 5432
+            DB_DATABASE: $KEYCLOAK_POSTGRES_DB
+            DB_USER: $KEYCLOAK_POSTGRES_USER
+            DB_PASSWORD: $KEYCLOAK_POSTGRES_PASSWORD
+            KEYCLOAK_USER: $KEYCLOAK_USER
+            KEYCLOAK_PASSWORD: $KEYCLOAK_PASSWORD
+            KEYCLOAK_IMPORT: /opt/jboss/keycloak/imports/realm-export.json -Dkeycloak.profile.feature.upload_scripts=enabled
+        ports:
+            - "8484:8080"
+        volumes:
+            - ./keycloak_import:/opt/jboss/keycloak/imports
+        depends_on:
+            - keycloak-postgres-test
+        restart: unless-stopped
+        networks:
+            - internal
+            
+    file-service-postgres-test:
+        image: postgres:14.2
+        container_name: file-service-postgres-test
+        environment:
+            POSTGRES_USER: $FILE_SERVICE_POSTGRES_USER
+            POSTGRES_PASSWORD: $FILE_SERVICE_POSTGRES_PASSWORD
+            POSTGRES_DB: $FILE_SERVICE_POSTGRES_DB
+        restart: unless-stopped
+        volumes:
+            - file_service_postgres_data:/var/lib/postgresql/data
+        networks:
+            - internal
+            
+    user-service:
+        build: ./UserService
+        container_name: user-service
+        environment:
+            KEYCLOAK_AUTH-SERVER-URL: http://host.docker.internal:8484/auth
+        ports:
+            - "8081:8081"
+        restart: unless-stopped
+        networks:
+            - internal
+            
+    file-service:
+        build: ./FileService
+        container_name: file-service
+        environment:
+            SPRING_DATASOURCE_URL: jdbc:postgresql://file-service-postgres-test:5432/$FILE_SERVICE_POSTGRES_DB
+            SPRING_DATASOURCE_USERNAME: $FILE_SERVICE_POSTGRES_USER
+            SPRING_DATASOURCE_PASSWORD: $FILE_SERVICE_POSTGRES_PASSWORD
+            SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak-test:8080/auth/realms/test/protocol/openid-connect/certs
+            
+            OBJECT-STORAGE_BUCKET-NAME: $BUCKET
+            OBJECT-STORAGE_KEY-ID: $KEY_ID
+            OBJECT-STORAGE_KEY-SECRET: $KEY_SECRET
+        ports:
+            - "8082:8082"
+        restart: unless-stopped
+        networks:
+            - internal
+        
+networks:
+    internal:
+        driver: bridge

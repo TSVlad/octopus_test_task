@@ -1,0 +1,21 @@
+server:
+  port: 8082
+  servlet:
+    context-path: /file-service-api
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/file_service_db
+    username: root
+    password: root
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8484/auth/realms/test/protocol/openid-connect/certs
+
+object-storage:
+#  bucket-name:
+#  key-id:
+#  key-secret:
+  url-duration: 3600
